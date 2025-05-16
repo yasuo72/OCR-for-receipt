@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 from scanner import ReceiptScanner
 from extractor import ReceiptExtractor
-from database import ReceiptDatabase
+from database_pg import ReceiptDatabase
 from exporter import ReceiptExporter
 
 # Initialize Flask app
@@ -37,9 +37,13 @@ if os.name == 'nt':  # Windows
             tesseract_path = path
             break
 
+# Set DATABASE_URL environment variable if not already set
+if 'DATABASE_URL' not in os.environ:
+    os.environ['DATABASE_URL'] = "postgresql://postgres:aiquBMzamtsVbbZIYPucoBNQZmxonVlg@ballast.proxy.rlwy.net:52981/railway"
+
 scanner = ReceiptScanner(tesseract_path)
 extractor = ReceiptExtractor()
-database = ReceiptDatabase()
+database = ReceiptDatabase(os.environ.get('DATABASE_URL'))
 exporter = ReceiptExporter()
 
 @app.route('/api/health', methods=['GET'])
