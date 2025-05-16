@@ -7,8 +7,16 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 class ReceiptDatabase:
-    def __init__(self, db_path: str = "data/receipts.db"):
+    def __init__(self, db_path: str = None):
         """Initialize the database connection."""
+        # Use environment variable for db_path if provided, otherwise use default
+        if db_path is None:
+            db_path = os.environ.get('DATABASE_URL', "data/receipts.db")
+            
+            # If it's a PostgreSQL URL from Railway, use SQLite instead for this app
+            if db_path.startswith('postgres'):
+                db_path = "data/receipts.db"
+        
         # Ensure the directory exists
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         

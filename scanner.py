@@ -20,8 +20,9 @@ class ReceiptScanner:
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
         
-        # Create data directory if it doesn't exist
+        # Create data directories if they don't exist
         os.makedirs("data/receipts", exist_ok=True)
+        os.makedirs("data/uploads", exist_ok=True)
     
     def scan_image(self, image_path: str) -> str:
         """

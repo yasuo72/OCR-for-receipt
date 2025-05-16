@@ -1,0 +1,11 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
+
+[deploy]
+startCommand = "gunicorn api:app"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+
+[nixpacks]
+aptPackages = ["tesseract-ocr", "libtesseract-dev", "tesseract-ocr-eng"]
