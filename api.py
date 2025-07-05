@@ -37,13 +37,28 @@ if os.name == 'nt':  # Windows
             tesseract_path = path
             break
 
-# Set DATABASE_URL environment variable if not already set
-if 'DATABASE_URL' not in os.environ:
-    os.environ['DATABASE_URL'] = "postgresql://postgres:aiquBMzamtsVbbZIYPucoBNQZmxonVlg@ballast.proxy.rlwy.net:52981/railway"
+# Optional database: only connect if DATABASE_URL is provided in the environment
+
 
 scanner = ReceiptScanner(tesseract_path)
 extractor = ReceiptExtractor()
-database = ReceiptDatabase(os.environ.get('DATABASE_URL'))
+
+class _NoDatabase:
+    def __getattr__(self, name):
+        def _unavailable(*args, **kwargs):
+            raise RuntimeError("Database is not configured")
+        return _unavailable
+
+try:
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        database = ReceiptDatabase(db_url)
+    else:
+        print("[OCR] Warning: DATABASE_URL not set – database functions disabled")
+        database = _NoDatabase()
+except Exception as e:
+    print(f"[OCR] Warning: could not connect to database: {e} – database functions disabled")
+    database = _NoDatabase()
 exporter = ReceiptExporter()
 
 @app.route('/api/health', methods=['GET'])
