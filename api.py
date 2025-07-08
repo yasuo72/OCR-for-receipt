@@ -54,8 +54,9 @@ try:
     if db_url:
         database = ReceiptDatabase(db_url)
     else:
-        print("[OCR] Warning: DATABASE_URL not set – database functions disabled")
-        database = _NoDatabase()
+        # Fallback to local SQLite database inside the container
+        print("[OCR] Warning: DATABASE_URL not set – falling back to local SQLite database (data/receipts.db)")
+        database = ReceiptDatabase()
 except Exception as e:
     print(f"[OCR] Warning: could not connect to database: {e} – database functions disabled")
     database = _NoDatabase()
