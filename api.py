@@ -124,6 +124,69 @@ def scan_receipt():
             'error': str(e)
         }), 500
 
+@app.route('/api/scan-and-extract', methods=['POST'])
+def scan_and_extract():
+    """Scan a receipt image and return structured data (optionally save to DB).
+
+    The request body can be multipart/form-data with a `file` or `image_base64` field.
+    Optionally include a query param `save=true` to persist the receipt and items.
+    """
+    try:
+        image_path = None
+        # Handle file upload
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename:
+                filename = secure_filename(file.filename)
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(image_path)
+        elif 'image_base64' in request.form:
+            image_data = request.form['image_base64']
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            image_bytes = base64.b64decode(image_data)
+            timestamp = int(datetime.now().timestamp())
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], f'receipt_{timestamp}.jpg')
+            with open(image_path, 'wb') as f:
+                f.write(image_bytes)
+        else:
+            return jsonify({'error': 'No image provided.'}), 400
+
+        # OCR scan
+        text = scanner.scan_image(image_path)
+        # Structured extraction
+        receipt_data = extractor.extract_data(text)
+
+        response = {
+            'success': True,
+            'data': receipt_data,
+            'image_path': image_path
+        }
+
+        # Optional DB save
+        save_flag = str(request.args.get('save', 'false')).lower() == 'true'
+        if save_flag:
+            # Prepare data similar to save_receipt()
+            receipt_row = {
+                'merchant': receipt_data.get('merchant') or 'Unknown',
+                'date': receipt_data.get('date'),
+                'total': float(receipt_data.get('total') or 0),
+                'tax': float(receipt_data.get('tax') or 0)
+            }
+            items_rows = []
+            for item in receipt_data.get('items', []):
+                items_rows.append({
+                    'name': item.get('name', ''),
+                    'quantity': float(item.get('quantity', 1)),
+                    'price': float(item.get('price', 0))
+                })
+            receipt_id = database.add_receipt(receipt_row, items_rows)
+            response['receipt_id'] = receipt_id
+            response['saved'] = True
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/extract', methods=['POST'])
 def extract_data():
     """
