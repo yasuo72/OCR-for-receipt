@@ -11,9 +11,8 @@ scikit-image==0.21.0
 # Text processing and parsing
 python-dateutil==2.8.2
 
-# Web framework and production server
+# Web framework (NO GUNICORN)
 flask==2.3.3
-gunicorn==21.2.0
 werkzeug==2.3.7
 
 # Data handling
