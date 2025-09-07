@@ -4,29 +4,18 @@ FROM python:3.10-slim
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
-    tesseract-ocr-hin \
     libtesseract-dev \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxrender1 \
     libxext6 \
-    libxext-dev \
-    libx11-dev \
-    libgthread-2.0-0 \
-    libgtk-3-0 \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libatlas-base-dev \
-    gfortran \
+    libgfortran5 \
     wget \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +46,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
 
 # Run the enhanced application
 CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 enhanced_api:app
