@@ -1,18 +1,16 @@
 FROM python:3.10-slim
 
-# Install system dependencies for enhanced OCR
-RUN apt-get update && apt-get install -y \
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     libtesseract-dev \
-    libglib2.0-0 \
-    libjpeg-dev \
+    libjpeg62-turbo-dev \
     libpng-dev \
-    libtiff-dev \
     wget \
-    curl \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
 
 # Set working directory
 WORKDIR /app

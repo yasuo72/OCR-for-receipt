@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Try to import enhanced scanner, fallback to basic functionality
+# Try to import enhanced scanner, fallback to basic OCR
 try:
     from enhanced_scanner import EnhancedReceiptScanner
     scanner = EnhancedReceiptScanner()
@@ -26,8 +26,18 @@ try:
     logger.info("Enhanced scanner loaded successfully")
 except ImportError as e:
     logger.warning(f"Enhanced scanner not available: {e}")
-    scanner = None
-    SCANNER_AVAILABLE = False
+    # Fallback to basic pytesseract OCR
+    try:
+        import pytesseract
+        from PIL import Image
+        import cv2
+        scanner = None
+        SCANNER_AVAILABLE = "basic"
+        logger.info("Basic OCR available (pytesseract)")
+    except ImportError:
+        scanner = None
+        SCANNER_AVAILABLE = False
+        logger.warning("No OCR capabilities available")
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'}
@@ -46,14 +56,33 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
+def basic_ocr_scan(filepath):
+    """Basic OCR scanning using pytesseract."""
+    import pytesseract
+    from PIL import Image
+    import cv2
+    
+    # Read and preprocess image
+    img = cv2.imread(filepath)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Extract text
+    text = pytesseract.image_to_string(gray)
+    
+    return {
+        'text': text.strip(),
+        'method': 'basic_pytesseract',
+        'confidence': 'unknown'
+    }
+
 @app.route('/api/scan', methods=['POST'])
 def scan_receipt():
-    """Enhanced receipt scanning endpoint."""
+    """Receipt scanning endpoint with fallback."""
     try:
-        if not SCANNER_AVAILABLE:
+        if SCANNER_AVAILABLE == False:
             return jsonify({
                 'error': 'Scanner not available',
-                'message': 'Enhanced OCR scanner could not be loaded'
+                'message': 'No OCR capabilities loaded'
             }), 503
             
         # Check if file is present
@@ -79,12 +108,16 @@ def scan_receipt():
         file.save(filepath)
         
         # Process the receipt
-        result = scanner.scan_receipt(filepath)
+        if SCANNER_AVAILABLE == True:
+            result = scanner.scan_receipt(filepath)
+        else:  # basic OCR
+            result = basic_ocr_scan(filepath)
         
         return jsonify({
             'success': True,
             'filename': filename,
             'data': result,
+            'scanner_type': SCANNER_AVAILABLE,
             'timestamp': datetime.now().isoformat()
         })
         
