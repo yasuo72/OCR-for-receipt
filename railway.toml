@@ -1,9 +1,7 @@
 [build]
 builder = "DOCKERFILE"
-buildCommand = ""
 
 [deploy]
-startCommand = "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 enhanced_api:app"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
