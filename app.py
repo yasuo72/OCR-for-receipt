@@ -103,13 +103,14 @@ def basic_ocr_scan(filepath):
             r'(\d+\.\d{2})'
         ]
         
+        receipt_data['total'] = None
         for pattern in total_patterns:
             matches = re.findall(pattern, text.lower())
             if matches:
                 try:
                     receipt_data['total'] = float(matches[-1])  # Take the last/largest amount
                     break
-                except ValueError:
+                except (ValueError, TypeError):
                     continue
         
         # Try to find date
@@ -118,6 +119,7 @@ def basic_ocr_scan(filepath):
             r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})'
         ]
         
+        receipt_data['date'] = None
         for pattern in date_patterns:
             matches = re.findall(pattern, text)
             if matches:
@@ -141,20 +143,37 @@ def scan_receipt():
     try:
         if SCANNER_AVAILABLE == False:
             return jsonify({
+                'success': False,
                 'error': 'Scanner not available',
-                'message': 'No OCR capabilities loaded'
+                'message': 'No OCR capabilities loaded',
+                'timestamp': datetime.now().isoformat()
             }), 503
             
         # Check if file is present
         if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'No file provided',
+                'message': 'Please upload an image file',
+                'timestamp': datetime.now().isoformat()
+            }), 400
             
         file = request.files['file']
         if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'No file selected',
+                'message': 'Please select a valid image file',
+                'timestamp': datetime.now().isoformat()
+            }), 400
             
         if not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Invalid file type',
+                'message': 'Please upload a valid image file (PNG, JPG, etc.)',
+                'timestamp': datetime.now().isoformat()
+            }), 400
             
         # Create directories
         os.makedirs('data/uploads', exist_ok=True)
@@ -177,28 +196,33 @@ def scan_receipt():
         
         logger.info(f"OCR result: {result}")
         
+        # Ensure all values are JSON serializable
+        if 'error' in result:
+            return jsonify({
+                'success': False,
+                'error': str(result['error']),
+                'message': 'OCR processing failed',
+                'filename': filename,
+                'timestamp': datetime.now().isoformat()
+            })
+        
         # Format response for Flutter app compatibility
         response_data = {
             'success': True,
-            'filename': filename,
-            'scanner_type': SCANNER_AVAILABLE,
+            'filename': str(filename),
+            'scanner_type': str(SCANNER_AVAILABLE),
             'timestamp': datetime.now().isoformat(),
-            'message': 'Receipt processed successfully'
-        }
-        
-        # Add OCR results in expected format
-        if 'error' in result:
-            response_data['success'] = False
-            response_data['error'] = result['error']
-        else:
-            response_data['receipt'] = {
-                'text': result.get('raw_text', ''),
-                'total': result.get('total', 0.0),
-                'date': result.get('date', ''),
-                'items': result.get('lines', []),
-                'confidence': result.get('confidence', 'basic'),
-                'method': result.get('method', 'basic_pytesseract')
+            'message': 'Receipt processed successfully',
+            'receipt': {
+                'text': str(result.get('raw_text', '')),
+                'total': float(result.get('total')) if result.get('total') is not None else 0.0,
+                'date': str(result.get('date')) if result.get('date') is not None else '',
+                'items': [str(item) for item in result.get('lines', [])],
+                'confidence': str(result.get('confidence', 'basic')),
+                'method': str(result.get('method', 'basic_pytesseract')),
+                'status': str(result.get('status', 'processed'))
             }
+        }
         
         return jsonify(response_data)
         
@@ -208,7 +232,9 @@ def scan_receipt():
         return jsonify({
             'success': False,
             'error': 'Processing failed',
-            'message': str(e)
+            'message': str(e),
+            'filename': '',
+            'timestamp': datetime.now().isoformat()
         }), 500
 
 @app.route('/api/receipts', methods=['GET'])
