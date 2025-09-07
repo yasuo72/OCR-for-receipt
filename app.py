@@ -57,23 +57,83 @@ def health():
     })
 
 def basic_ocr_scan(filepath):
-    """Basic OCR scanning using pytesseract."""
+    """Basic OCR scanning using pytesseract with enhanced preprocessing."""
     import pytesseract
     from PIL import Image
     import cv2
+    import numpy as np
+    import re
+    from datetime import datetime
     
-    # Read and preprocess image
-    img = cv2.imread(filepath)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Extract text
-    text = pytesseract.image_to_string(gray)
-    
-    return {
-        'text': text.strip(),
-        'method': 'basic_pytesseract',
-        'confidence': 'unknown'
-    }
+    try:
+        # Read and preprocess image
+        img = cv2.imread(filepath)
+        if img is None:
+            raise ValueError("Could not read image file")
+            
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Apply image enhancement
+        # Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Apply threshold to get better contrast
+        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Extract text using pytesseract
+        text = pytesseract.image_to_string(thresh, config='--psm 6')
+        
+        # Basic text processing and extraction
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        
+        # Try to extract basic receipt information
+        receipt_data = {
+            'raw_text': text.strip(),
+            'lines': lines,
+            'method': 'basic_pytesseract',
+            'status': 'processed'
+        }
+        
+        # Try to find total amount (basic pattern matching)
+        total_patterns = [
+            r'total[:\s]*\$?(\d+\.?\d*)',
+            r'amount[:\s]*\$?(\d+\.?\d*)',
+            r'\$(\d+\.\d{2})',
+            r'(\d+\.\d{2})'
+        ]
+        
+        for pattern in total_patterns:
+            matches = re.findall(pattern, text.lower())
+            if matches:
+                try:
+                    receipt_data['total'] = float(matches[-1])  # Take the last/largest amount
+                    break
+                except ValueError:
+                    continue
+        
+        # Try to find date
+        date_patterns = [
+            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
+            r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})'
+        ]
+        
+        for pattern in date_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                receipt_data['date'] = matches[0]
+                break
+        
+        return receipt_data
+        
+    except Exception as e:
+        logger.error(f"OCR processing error: {str(e)}")
+        return {
+            'error': str(e),
+            'method': 'basic_pytesseract',
+            'status': 'failed',
+            'raw_text': ''
+        }
 
 @app.route('/api/scan', methods=['POST'])
 def scan_receipt():
@@ -107,24 +167,46 @@ def scan_receipt():
         filepath = os.path.join('data/uploads', filename)
         file.save(filepath)
         
+        logger.info(f"Processing receipt: {filename}")
+        
         # Process the receipt
         if SCANNER_AVAILABLE == True:
             result = scanner.scan_receipt(filepath)
         else:  # basic OCR
             result = basic_ocr_scan(filepath)
         
-        return jsonify({
+        logger.info(f"OCR result: {result}")
+        
+        # Format response for Flutter app compatibility
+        response_data = {
             'success': True,
             'filename': filename,
-            'data': result,
             'scanner_type': SCANNER_AVAILABLE,
-            'timestamp': datetime.now().isoformat()
-        })
+            'timestamp': datetime.now().isoformat(),
+            'message': 'Receipt processed successfully'
+        }
+        
+        # Add OCR results in expected format
+        if 'error' in result:
+            response_data['success'] = False
+            response_data['error'] = result['error']
+        else:
+            response_data['receipt'] = {
+                'text': result.get('raw_text', ''),
+                'total': result.get('total', 0.0),
+                'date': result.get('date', ''),
+                'items': result.get('lines', []),
+                'confidence': result.get('confidence', 'basic'),
+                'method': result.get('method', 'basic_pytesseract')
+            }
+        
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Error processing receipt: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({
+            'success': False,
             'error': 'Processing failed',
             'message': str(e)
         }), 500
