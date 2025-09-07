@@ -96,6 +96,39 @@ def scan_receipt():
             'message': str(e)
         }), 500
 
+@app.route('/api/receipts', methods=['GET'])
+def get_receipts():
+    """Get list of processed receipts."""
+    try:
+        receipts_dir = 'data/uploads'
+        if not os.path.exists(receipts_dir):
+            return jsonify({'receipts': []})
+            
+        receipts = []
+        for filename in os.listdir(receipts_dir):
+            if allowed_file(filename):
+                filepath = os.path.join(receipts_dir, filename)
+                stat = os.stat(filepath)
+                receipts.append({
+                    'filename': filename,
+                    'size': stat.st_size,
+                    'created': datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+        
+        return jsonify({
+            'success': True,
+            'receipts': receipts,
+            'count': len(receipts)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting receipts: {str(e)}")
+        return jsonify({
+            'error': 'Failed to get receipts',
+            'message': str(e)
+        }), 500
+
 @app.route('/api/info')
 def api_info():
     """API information endpoint."""
@@ -106,6 +139,7 @@ def api_info():
         'endpoints': {
             'health': '/api/health',
             'scan': '/api/scan (POST)',
+            'receipts': '/api/receipts (GET)',
             'info': '/api/info'
         }
     })
