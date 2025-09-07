@@ -5,15 +5,10 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
     libtesseract-dev \
-    libgl1-mesa-glx \
     libglib2.0-0 \
-    libsm6 \
-    libxrender1 \
-    libxext6 \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libgfortran5 \
     wget \
     curl \
     && apt-get clean \
