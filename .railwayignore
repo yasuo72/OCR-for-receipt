@@ -1,0 +1,33 @@
+# Railway deployment ignore file
+# Test files and documentation
+test_*.py
+*_test.py
+*.md
+!README_Enhanced.md
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local data directories (structure preserved, content ignored)
+data/uploads/*
+data/processed/*
+data/results/*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/

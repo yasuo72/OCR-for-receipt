@@ -1,0 +1,29 @@
+# Enhanced OCR Receipt Scanner - Production Requirements
+# Core OCR libraries
+pytesseract>=0.3.10
+easyocr>=1.7.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+
+# Image processing and computer vision
+numpy>=1.24.0
+scikit-image>=0.21.0
+
+# Text processing and parsing
+python-dateutil>=2.8.2
+regex>=2023.6.3
+
+# Web framework and production server
+flask>=2.3.0
+gunicorn>=21.2.0
+werkzeug>=2.3.0
+
+# Data handling
+pandas>=2.0.0
+
+# Utilities
+tqdm>=4.65.0
+requests>=2.31.0
+
+# Production monitoring
+psutil>=5.9.0

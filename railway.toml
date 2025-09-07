@@ -3,6 +3,12 @@ builder = "DOCKERFILE"
 buildCommand = ""
 
 [deploy]
-startCommand = ""
+startCommand = "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 enhanced_api:app"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 100
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+
+[env]
+FLASK_ENV = "production"
+PYTHONUNBUFFERED = "1"
+TESSDATA_PREFIX = "/usr/share/tesseract-ocr/5/tessdata"
