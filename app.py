@@ -207,12 +207,20 @@ def scan_receipt():
             })
         
         # Format response for Flutter app compatibility
+        # Flutter expects specific field names for the extractData method
         response_data = {
             'success': True,
             'filename': str(filename),
             'scanner_type': str(SCANNER_AVAILABLE),
             'timestamp': datetime.now().isoformat(),
             'message': 'Receipt processed successfully',
+            'text': str(result.get('raw_text', '')),  # Flutter expects text at root level
+            'merchant': 'Unknown Merchant',  # Flutter expects merchant field
+            'date': str(result.get('date')) if result.get('date') is not None else '',
+            'total': result.get('total') if result.get('total') is not None else None,  # Keep as number or null
+            'tax': None,  # Flutter expects tax field
+            'raw_text': str(result.get('raw_text', '')),  # Flutter expects raw_text field
+            'items': [],  # Flutter expects items array
             'receipt': {
                 'text': str(result.get('raw_text', '')),
                 'total': float(result.get('total')) if result.get('total') is not None else 0.0,
