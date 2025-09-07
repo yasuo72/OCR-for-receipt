@@ -1,0 +1,5 @@
+# Force Railway to rebuild by changing ignore patterns
+__pycache__/
+*.pyc
+*.pyo
+.git/
