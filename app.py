@@ -363,23 +363,33 @@ def extract_data():
         text = data['text']
         text_lower = text.lower()
         
-        # Extract merchant name from first few lines (usually contains business name)
-        merchant_name = 'Unknown Merchant'
-        lines = text.split('\n')[:5]  # Check first 5 lines
+        # Extract merchant name - enhanced for business invoices
+        merchant_name = None
+        lines = text.split('\n')[:10]  # Check first 10 lines for business invoices
+        
+        # Look for business names in invoice headers
         for line in lines:
             line = line.strip()
-            if len(line) > 3 and not re.match(r'^\d+', line):  # Not starting with numbers
-                # Skip common non-merchant words
-                if not any(skip in line.lower() for skip in ['sale', 'batch', 'appr', 'trace', 'visa', 'phone', 'address']):
-                    # Clean up the line
-                    clean_line = re.sub(r'[^\w\s]', ' ', line).strip()
-                    if len(clean_line) > 3:
-                        merchant_name = clean_line.title()
+            if len(line) > 5:
+                # Business invoice patterns
+                if re.search(r'(pvt ltd|private limited|manufacturer|company|corp)', line, re.IGNORECASE):
+                    # Extract company name before "Pvt Ltd" etc.
+                    match = re.search(r'^([A-Za-z][A-Za-z\s&\.]{3,40}?)(?:\s+pvt|private|manufacturer|company|corp)', line, re.IGNORECASE)
+                    if match:
+                        merchant_name = match.group(1).strip()
+                        break
+                
+                # Regular merchant detection
+                elif not re.search(r'\d{10,}|address|phone|email|gst|cin|invoice|tax|date|time', line, re.IGNORECASE):
+                    if not re.search(r'(bill|receipt|total|amount|buyer|supplier)', line, re.IGNORECASE):
+                        merchant_name = line
                         break
         
-        # Fallback to specific known patterns
-        if merchant_name == 'Unknown Merchant':
-            if any(pattern in text_lower for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
+        # Fallback merchant detection for known stores
+        if not merchant_name:
+            if 'ace mobile manufacturer' in text_lower:
+                merchant_name = 'Ace Mobile Manufacturer Pvt Ltd'
+            elif 'd-mart' in text_lower or 'dmart' in text_lower:
                 merchant_name = 'D-Mart'
             elif 'big bazaar' in text_lower:
                 merchant_name = 'Big Bazaar'
@@ -392,14 +402,23 @@ def extract_data():
             elif 'kfc' in text_lower:
                 merchant_name = 'KFC'
         
+        if not merchant_name:
+            merchant_name = 'Unknown Merchant'
+        
         # Extract total amount using multiple international patterns
         total_amount = None
         
-        # Multiple total patterns for different countries and formats
+        # Multiple total patterns for different receipt/invoice formats
         total_patterns = [
+            # Business Invoice formats with large amounts
+            r'₹\s*(\d{1,3}(?:,\d{2,3})*\.\d{2})',  # ₹ 96,32,000.00 format
+            r'(\d{1,3}(?:,\d{2,3})*\.\d{2})\s*(?:only|/-)',  # 96,32,000.00 Only
+            r'total[:\s]*₹?\s*(\d{1,3}(?:,\d{2,3})*\.?\d*)',  # Total with commas
+            r'amount[:\s]*₹?\s*(\d{1,3}(?:,\d{2,3})*\.?\d*)',  # Amount with commas
+            
             # US format: "TOTAL: $31.39"
             r'total:\s*\$(\d+\.\d{2})',
-            # Indian format: "Total: ₹1095.85" or "Total Rs. 1095.85"
+            # Indian retail format: "Total: ₹1095.85" or "Total Rs. 1095.85"
             r'total[:\s]*₹?\s*(\d+\.?\d*)',
             r'total[:\s]*rs\.?\s*(\d+\.?\d*)',
             # D-Mart specific: "Qty: iY 1095.85"
@@ -417,7 +436,10 @@ def extract_data():
             match = re.search(pattern, text_lower)
             if match:
                 try:
-                    total_amount = float(match.group(1))
+                    amount_str = match.group(1)
+                    # Remove commas from Indian number format (96,32,000.00 -> 9632000.00)
+                    amount_str = amount_str.replace(',', '')
+                    total_amount = float(amount_str)
                     logger.info(f"Found total using pattern: {pattern} = {total_amount}")
                     break
                 except (ValueError, TypeError):
@@ -496,35 +518,42 @@ def extract_data():
             if len(line) < 3:  # Skip very short lines
                 continue
             
-            # Skip header/footer lines
+            # Skip header/footer lines but allow business invoice items
             skip_patterns = [
-                r'(tax|gst|cgst|sgst|igst|invoice|bill|receipt|total|subtotal|discount|phone|address|thank|visit)',
-                r'(avenue|supermarts|ltd|pvt|company|corp)',
-                r'(cin|gstin|fssai|license)',
-                r'(cashier|counter|operator)',
+                r'(gst|cgst|sgst|igst|invoice|bill|receipt|subtotal|discount|phone|address|thank|visit|hsn|rate|quantity)',
+                r'(avenue|supermarts|ltd|pvt|company|corp|manufacturer)',
+                r'(cin|gstin|fssai|license|state|buyer|supplier)',
+                r'(cashier|counter|operator|authorized|signatory)',
                 r'(\d{10,})',  # Long numbers (phone, license numbers)
                 r'^[*\-=+]{3,}',  # Decorative lines
+                r'(description of goods|terms of delivery|central tax|state tax)',
             ]
             
             if any(re.search(pattern, line, re.IGNORECASE) for pattern in skip_patterns):
                 continue
             
-            # Generic item patterns for different receipt formats
+            # Enhanced item patterns for business invoices and receipts
             item_patterns = [
-                # Pattern 1: Item name followed by price (most common)
+                # Business Invoice: "Ace A1-Smartphone" with amounts like "30,00,000.00"
+                r'^([A-Za-z][A-Za-z0-9\s\-\.]{3,40}?)\s+.*?(\d{1,3}(?:,\d{2,3})*\.\d{2})$',
+                
+                # Standard retail: Item name followed by price
                 r'^([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})$',
                 
-                # Pattern 2: Numbered items "1) ITEM_NAME PRICE"
+                # Numbered items "1) ITEM_NAME PRICE"
                 r'^\d+\)\s*([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})',
                 
-                # Pattern 3: Item with quantity "ITEM_NAME Qty: X Price: Y"
+                # Item with quantity "ITEM_NAME Qty: X Price: Y"
                 r'^([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?qty.*?(\d+\.\d{2})',
                 
-                # Pattern 4: Product code + item name + price
-                r'^\d{3,6}\s+([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})',
+                # Product code + item name + price (HSN codes)
+                r'^\d{3,6}\s+([A-Za-z][A-Za-z\s\-]{2,30}?)\s+.*?(\d{1,3}(?:,\d{2,3})*\.\d{2})',
                 
-                # Pattern 5: Simple "ITEM PRICE" format
+                # Simple "ITEM PRICE" format
                 r'^([A-Za-z][A-Za-z\s]{2,20})\s+(\d+\.\d{2})$',
+                
+                # Business format with batch info: "Ace A1-Smartphone Batch : Batch1"
+                r'^([A-Za-z][A-Za-z0-9\s\-]{3,30}?)\s+(?:batch|lot).*?(\d{1,3}(?:,\d{2,3})*\.\d{2})',
             ]
             
             for pattern in item_patterns:
@@ -532,11 +561,14 @@ def extract_data():
                 if match:
                     try:
                         item_name = match.group(1).strip()
-                        price = float(match.group(2))
+                        price_str = match.group(2)
+                        # Remove commas from price (30,00,000.00 -> 3000000.00)
+                        price_str = price_str.replace(',', '')
+                        price = float(price_str)
                         
-                        # Validate item name and price
+                        # Validate item name and price (expanded range for business invoices)
                         if (len(item_name) >= 3 and 
-                            price > 0 and price < 10000 and  # Reasonable price range
+                            price > 0 and price < 100000000 and  # Expanded for business amounts
                             not re.match(r'^\d+$', item_name)):  # Not just numbers
                             
                             # Clean up item name
