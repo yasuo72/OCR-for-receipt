@@ -9,17 +9,25 @@ import traceback
 import re
 from datetime import datetime
 from flask import Flask, request, jsonify
-from werkzeug.utils import secure_filename
+from flask_cors import CORS
 import cv2
 import numpy as np
 from PIL import Image
 import pytesseract
+import io
+import base64
+import re
+import logging
+from datetime import datetime
+import os
+import spacy
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Try to import enhanced scanner, fallback to basic OCR
@@ -633,6 +641,104 @@ def extract_data():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/voice/parse-expense', methods=['POST'])
+def parse_voice_expense():
+    """Parse voice input into structured expense data."""
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        voice_text = data['text'].lower().strip()
+        logger.info(f"Parsing voice expense: {voice_text}")
+        
+        # Extract amount using multiple patterns
+        amount = None
+        amount_patterns = [
+            r'(\d+(?:\.\d{2})?)\s*(?:rupees?|rs\.?|₹)',
+            r'(?:rupees?|rs\.?|₹)\s*(\d+(?:\.\d{2})?)',
+            r'(\d+(?:\.\d{2})?)\s*(?:dollars?|\$)',
+            r'(?:spent|paid|cost|costs)\s+(?:rupees?|rs\.?|₹)?\s*(\d+(?:\.\d{2})?)',
+            r'(\d+(?:\.\d{2})?)\s*(?:bucks?|only)',
+            r'(\d{1,5}(?:\.\d{2})?)',  # Generic number pattern
+        ]
+        
+        for pattern in amount_patterns:
+            match = re.search(pattern, voice_text)
+            if match:
+                try:
+                    amount = float(match.group(1))
+                    if amount > 0 and amount < 100000:  # Reasonable range
+                        break
+                except (ValueError, TypeError):
+                    continue
+        
+        # Extract category based on keywords
+        category = 'Other'
+        category_keywords = {
+            'Food': ['food', 'lunch', 'dinner', 'breakfast', 'restaurant', 'cafe', 'pizza', 'burger', 'meal', 'eat', 'ate', 'snack', 'coffee', 'tea'],
+            'Transport': ['taxi', 'uber', 'ola', 'bus', 'train', 'metro', 'fuel', 'petrol', 'diesel', 'auto', 'rickshaw', 'travel'],
+            'Shopping': ['shopping', 'clothes', 'shirt', 'shoes', 'dress', 'mall', 'store', 'bought', 'purchase', 'buy'],
+            'Entertainment': ['movie', 'cinema', 'film', 'game', 'party', 'club', 'concert', 'show', 'fun'],
+            'Health': ['doctor', 'medicine', 'hospital', 'pharmacy', 'medical', 'clinic', 'health', 'pills'],
+            'Utilities': ['electricity', 'water', 'gas', 'internet', 'phone', 'mobile', 'bill', 'recharge'],
+            'Groceries': ['grocery', 'groceries', 'vegetables', 'fruits', 'milk', 'bread', 'supermarket', 'market'],
+            'Education': ['book', 'books', 'course', 'class', 'school', 'college', 'education', 'study'],
+            'Personal Care': ['haircut', 'salon', 'cosmetics', 'beauty', 'spa', 'grooming'],
+        }
+        
+        for cat, keywords in category_keywords.items():
+            if any(keyword in voice_text for keyword in keywords):
+                category = cat
+                break
+        
+        # Extract description by cleaning the text
+        description = voice_text
+        
+        # Remove amount mentions
+        for pattern in amount_patterns:
+            description = re.sub(pattern, '', description)
+        
+        # Remove common filler words
+        filler_words = ['i', 'spent', 'paid', 'bought', 'for', 'on', 'at', 'in', 'the', 'a', 'an', 'today', 'yesterday', 'just', 'only', 'about', 'around']
+        words = description.split()
+        clean_words = [word for word in words if word not in filler_words and len(word) > 1]
+        
+        description = ' '.join(clean_words).strip()
+        if not description:
+            description = f"Voice expense - {category.lower()}"
+        
+        # Calculate confidence score
+        confidence = 0.3  # Base confidence
+        if amount is not None:
+            confidence += 0.4
+        if category != 'Other':
+            confidence += 0.2
+        if len(description) > 3:
+            confidence += 0.1
+        
+        result = {
+            'amount': amount or 0.0,
+            'category': category,
+            'description': description.title(),
+            'originalText': data['text'],
+            'confidence': min(confidence, 1.0),
+            'timestamp': datetime.now().isoformat(),
+            'currency': 'INR',
+            'paymentMethod': 'Unknown'
+        }
+        
+        logger.info(f"Parsed voice expense: {result}")
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error parsing voice expense: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/info')
 def api_info():
