@@ -210,11 +210,8 @@ def scan_receipt():
         
         logger.info(f"Processing receipt: {filename}")
         
-        # Process the receipt
-        if SCANNER_AVAILABLE == True:
-            result = scanner.scan_receipt(filepath)
-        else:  # basic OCR
-            result = basic_ocr_scan(filepath)
+        # Process the receipt using our OCR function
+        result = process_ocr(filepath)
         
         logger.info(f"OCR result: {result}")
         
