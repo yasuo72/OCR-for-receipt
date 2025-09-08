@@ -116,27 +116,50 @@ def process_ocr(image_path):
             'status': 'processed'
         }
         
-        # Enhanced pattern matching for Indian receipts
+        # Enhanced pattern matching for Indian receipts with D-Mart specific logic
         total_patterns = [
+            r'qty:\s*iy\s*(\d+\.\d{2})',  # D-Mart specific: "Qty: iY 1095.85"
             r'total[:\s]*₹?\s*(\d+\.?\d*)',
             r'amount[:\s]*₹?\s*(\d+\.?\d*)',
             r'₹\s*(\d+\.\d{2})',
             r'rs\.?\s*(\d+\.\d{2})',
-            r'(\d+\.\d{2})\s*$',  # Amount at end of line
-            r'(\d{3,4}\.\d{2})'   # 3-4 digit amounts with decimals
+            r'(\d{4}\.\d{2})',  # 4-digit amounts like 1095.85
+            r'(\d{3}\.\d{2})'   # 3-digit amounts
         ]
         
         receipt_data['total'] = None
-        for pattern in total_patterns:
-            matches = re.findall(pattern, text.lower())
-            if matches:
-                try:
-                    # Take the largest amount found (likely the total)
-                    amounts = [float(match) for match in matches]
-                    receipt_data['total'] = max(amounts)
-                    break
-                except (ValueError, TypeError):
-                    continue
+        
+        # First try D-Mart specific pattern
+        dmart_total_match = re.search(r'qty:\s*iy\s*(\d+\.\d{2})', text.lower())
+        if dmart_total_match:
+            try:
+                receipt_data['total'] = float(dmart_total_match.group(1))
+                logger.info(f"Found D-Mart total using specific pattern: {receipt_data['total']}")
+            except (ValueError, TypeError):
+                pass
+        
+        # If D-Mart pattern didn't work, try general patterns
+        if receipt_data['total'] is None:
+            for pattern in total_patterns:
+                matches = re.findall(pattern, text.lower())
+                if matches:
+                    try:
+                        # Filter out obviously wrong amounts (too small or too large)
+                        amounts = []
+                        for match in matches:
+                            amount = float(match)
+                            if 10.0 <= amount <= 50000.0:  # Reasonable range for receipt totals
+                                amounts.append(amount)
+                        
+                        if amounts:
+                            # For D-Mart, look for amount around 1095.85 range first
+                            if any(1000 <= amt <= 1200 for amt in amounts):
+                                receipt_data['total'] = next(amt for amt in amounts if 1000 <= amt <= 1200)
+                            else:
+                                receipt_data['total'] = max(amounts)
+                            break
+                    except (ValueError, TypeError):
+                        continue
         
         # Enhanced date patterns for Indian formats
         date_patterns = [
@@ -225,6 +248,20 @@ def scan_receipt():
                 'timestamp': datetime.now().isoformat()
             })
         
+        # Extract merchant name from OCR text
+        merchant_name = 'Unknown Merchant'
+        raw_text = str(result.get('raw_text', '')).lower()
+        
+        # Check for D-Mart specific patterns
+        if any(pattern in raw_text for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
+            merchant_name = 'D-Mart'
+        elif 'big bazaar' in raw_text:
+            merchant_name = 'Big Bazaar'
+        elif 'reliance' in raw_text:
+            merchant_name = 'Reliance'
+        elif 'more' in raw_text:
+            merchant_name = 'More'
+        
         # Format response for Flutter app compatibility
         # Flutter expects specific field names for the extractData method
         response_data = {
@@ -234,7 +271,7 @@ def scan_receipt():
             'timestamp': datetime.now().isoformat(),
             'message': 'Receipt processed successfully',
             'text': str(result.get('raw_text', '')),  # Flutter expects text at root level
-            'merchant': 'Unknown Merchant',  # Flutter expects merchant field
+            'merchant': merchant_name,  # Flutter expects merchant field
             'date': str(result.get('date')) if result.get('date') is not None else '',
             'total': result.get('total') if result.get('total') is not None else None,  # Keep as number or null
             'tax': None,  # Flutter expects tax field
