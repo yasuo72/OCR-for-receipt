@@ -5,11 +5,15 @@ OCR Receipt Scanner API - Railway Deployment
 import os
 import sys
 import logging
-from flask import Flask, request, jsonify, send_file
-from werkzeug.utils import secure_filename
-import json
-from datetime import datetime
 import traceback
+import re
+from datetime import datetime
+from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
+import cv2
+import numpy as np
+from PIL import Image
+import pytesseract
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,23 +25,17 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # Try to import enhanced scanner, fallback to basic OCR
 try:
     from enhanced_scanner import EnhancedReceiptScanner
-    scanner = EnhancedReceiptScanner()
-    SCANNER_AVAILABLE = True
+    from enhanced_extractor import EnhancedReceiptExtractor
+    enhanced_scanner = EnhancedReceiptScanner()
+    enhanced_extractor = EnhancedReceiptExtractor()
+    SCANNER_AVAILABLE = "enhanced"
     logger.info("Enhanced scanner loaded successfully")
 except ImportError as e:
     logger.warning(f"Enhanced scanner not available: {e}")
-    # Fallback to basic pytesseract OCR
-    try:
-        import pytesseract
-        from PIL import Image
-        import cv2
-        scanner = None
-        SCANNER_AVAILABLE = "basic"
-        logger.info("Basic OCR available (pytesseract)")
-    except ImportError:
-        scanner = None
-        SCANNER_AVAILABLE = False
-        logger.warning("No OCR capabilities available")
+    enhanced_scanner = None
+    enhanced_extractor = None
+    SCANNER_AVAILABLE = "basic"
+    logger.info("Basic OCR available (pytesseract)")
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'}
@@ -56,29 +54,52 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
-def basic_ocr_scan(filepath):
-    """Basic OCR scanning using pytesseract with enhanced preprocessing."""
-    import pytesseract
-    from PIL import Image
-    import cv2
-    import numpy as np
-    import re
-    from datetime import datetime
-    
+def process_ocr(image_path):
+    """Process image using OCR and extract text."""
     try:
-        # Read and preprocess image
-        img = cv2.imread(filepath)
-        if img is None:
-            raise ValueError("Could not read image file")
+        # Use enhanced scanner if available for better accuracy
+        if SCANNER_AVAILABLE == "enhanced" and enhanced_scanner is not None:
+            logger.info("Using enhanced OCR scanner for better accuracy")
             
-        # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            # Use enhanced scanner with multiple preprocessing techniques
+            result = enhanced_scanner.scan_receipt(image_path)
+            
+            if result and 'extracted_data' in result:
+                extracted_data = result['extracted_data']
+                
+                # Format result to match expected structure
+                receipt_data = {
+                    'raw_text': result.get('raw_text', ''),
+                    'lines': result.get('raw_text', '').split('\n') if result.get('raw_text') else [],
+                    'method': f"enhanced_{result.get('best_method', 'unknown')}",
+                    'status': 'processed',
+                    'confidence': result.get('confidence_score', 0),
+                    'total': extracted_data.get('total_amount'),
+                    'date': extracted_data.get('date'),
+                    'merchant': extracted_data.get('merchant_name', 'Unknown Merchant'),
+                    'items': extracted_data.get('items', [])
+                }
+                
+                logger.info(f"Enhanced OCR result: {receipt_data}")
+                return receipt_data
+            else:
+                logger.warning("Enhanced scanner failed, falling back to basic OCR")
         
-        # Apply image enhancement
-        # Gaussian blur to reduce noise
+        # Fallback to basic OCR processing
+        logger.info("Using basic OCR processing")
+        
+        # Load and preprocess image
+        image = cv2.imread(image_path)
+        if image is None:
+            return {'error': 'Could not load image'}
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply Gaussian blur to reduce noise
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         
-        # Apply threshold to get better contrast
+        # Apply threshold to get binary image
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         # Extract text using pytesseract
@@ -95,12 +116,14 @@ def basic_ocr_scan(filepath):
             'status': 'processed'
         }
         
-        # Try to find total amount (basic pattern matching)
+        # Enhanced pattern matching for Indian receipts
         total_patterns = [
-            r'total[:\s]*\$?(\d+\.?\d*)',
-            r'amount[:\s]*\$?(\d+\.?\d*)',
-            r'\$(\d+\.\d{2})',
-            r'(\d+\.\d{2})'
+            r'total[:\s]*₹?\s*(\d+\.?\d*)',
+            r'amount[:\s]*₹?\s*(\d+\.?\d*)',
+            r'₹\s*(\d+\.\d{2})',
+            r'rs\.?\s*(\d+\.\d{2})',
+            r'(\d+\.\d{2})\s*$',  # Amount at end of line
+            r'(\d{3,4}\.\d{2})'   # 3-4 digit amounts with decimals
         ]
         
         receipt_data['total'] = None
@@ -108,20 +131,24 @@ def basic_ocr_scan(filepath):
             matches = re.findall(pattern, text.lower())
             if matches:
                 try:
-                    receipt_data['total'] = float(matches[-1])  # Take the last/largest amount
+                    # Take the largest amount found (likely the total)
+                    amounts = [float(match) for match in matches]
+                    receipt_data['total'] = max(amounts)
                     break
                 except (ValueError, TypeError):
                     continue
         
-        # Try to find date
+        # Enhanced date patterns for Indian formats
         date_patterns = [
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})'
+            r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})',
+            r'(\d{2}/\d{2}/\d{4})',
+            r'bill dt[:\s]*(\d{2}/\d{2}/\d{4})'
         ]
         
         receipt_data['date'] = None
         for pattern in date_patterns:
-            matches = re.findall(pattern, text)
+            matches = re.findall(pattern, text.lower())
             if matches:
                 receipt_data['date'] = matches[0]
                 break
@@ -130,12 +157,7 @@ def basic_ocr_scan(filepath):
         
     except Exception as e:
         logger.error(f"OCR processing error: {str(e)}")
-        return {
-            'error': str(e),
-            'method': 'basic_pytesseract',
-            'status': 'failed',
-            'raw_text': ''
-        }
+        return {'error': str(e)}
 
 @app.route('/api/scan', methods=['POST'])
 def scan_receipt():
