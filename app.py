@@ -428,29 +428,102 @@ def extract_data():
                         'totalPrice': price
                     })
         
-        # If no items found with patterns, extract from known D-Mart items in the text
-        if not items:
-            # Common D-Mart items that might be garbled in OCR
-            dmart_items = [
-                ('CHAT', 70.00),
-                ('CBT', 2.90), 
-                ('COM', 6.0),
-                ('cast', 5.0)
+        # Generic item extraction for all receipt types
+        # Extract items using flexible patterns that work across different receipt formats
+        
+        # Split text into lines for line-by-line analysis
+        lines = text.split('\n')
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if len(line) < 3:  # Skip very short lines
+                continue
+            
+            # Skip header/footer lines
+            skip_patterns = [
+                r'(tax|gst|cgst|sgst|igst|invoice|bill|receipt|total|subtotal|discount|phone|address|thank|visit)',
+                r'(avenue|supermarts|ltd|pvt|company|corp)',
+                r'(cin|gstin|fssai|license)',
+                r'(cashier|counter|operator)',
+                r'(\d{10,})',  # Long numbers (phone, license numbers)
+                r'^[*\-=+]{3,}',  # Decorative lines
             ]
             
-            for item_name, default_price in dmart_items:
-                if item_name.lower() in text_lower:
-                    # Try to find the actual price near the item name
-                    price_pattern = rf'{re.escape(item_name.lower())}.*?(\d+\.\d{{2}})'
-                    price_match = re.search(price_pattern, text_lower)
-                    price = float(price_match.group(1)) if price_match else default_price
+            if any(re.search(pattern, line, re.IGNORECASE) for pattern in skip_patterns):
+                continue
+            
+            # Generic item patterns for different receipt formats
+            item_patterns = [
+                # Pattern 1: Item name followed by price (most common)
+                r'^([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})$',
+                
+                # Pattern 2: Numbered items "1) ITEM_NAME PRICE"
+                r'^\d+\)\s*([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})',
+                
+                # Pattern 3: Item with quantity "ITEM_NAME Qty: X Price: Y"
+                r'^([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?qty.*?(\d+\.\d{2})',
+                
+                # Pattern 4: Product code + item name + price
+                r'^\d{3,6}\s+([A-Za-z][A-Za-z\s]{2,30}?)\s+.*?(\d+\.\d{2})',
+                
+                # Pattern 5: Simple "ITEM PRICE" format
+                r'^([A-Za-z][A-Za-z\s]{2,20})\s+(\d+\.\d{2})$',
+            ]
+            
+            for pattern in item_patterns:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    try:
+                        item_name = match.group(1).strip()
+                        price = float(match.group(2))
+                        
+                        # Validate item name and price
+                        if (len(item_name) >= 3 and 
+                            price > 0 and price < 10000 and  # Reasonable price range
+                            not re.match(r'^\d+$', item_name)):  # Not just numbers
+                            
+                            # Clean up item name
+                            item_name = re.sub(r'[^\w\s]', ' ', item_name).strip()
+                            item_name = ' '.join(item_name.split())  # Remove extra spaces
+                            
+                            # Check for duplicates
+                            if not any(item['name'].lower() == item_name.lower() for item in items):
+                                items.append({
+                                    'name': item_name.title(),
+                                    'quantity': 1,
+                                    'price': price,
+                                    'totalPrice': price
+                                })
+                            break
+                    except (ValueError, IndexError):
+                        continue
+        
+        # If no items found with generic patterns, try extracting from price-containing lines
+        if not items:
+            for line in lines:
+                line = line.strip()
+                # Find lines with prices but not totals/taxes
+                if (re.search(r'\d+\.\d{2}', line) and 
+                    not re.search(r'(total|tax|gst|subtotal|discount)', line, re.IGNORECASE) and
+                    len(line) > 5):
                     
-                    items.append({
-                        'name': item_name.upper(),
-                        'quantity': 1,
-                        'price': price,
-                        'totalPrice': price
-                    })
+                    # Extract potential item name and price
+                    price_match = re.search(r'(\d+\.\d{2})', line)
+                    if price_match:
+                        price = float(price_match.group(1))
+                        # Get text before the price as item name
+                        item_name = line[:price_match.start()].strip()
+                        item_name = re.sub(r'^\d+\)?\s*', '', item_name)  # Remove numbering
+                        item_name = re.sub(r'[^\w\s]', ' ', item_name).strip()
+                        
+                        if (len(item_name) >= 3 and price > 0 and price < 10000 and
+                            not any(item['name'].lower() == item_name.lower() for item in items)):
+                            items.append({
+                                'name': item_name.title(),
+                                'quantity': 1,
+                                'price': price,
+                                'totalPrice': price
+                            })
         
         # Return structured data in format Flutter expects
         return jsonify({
