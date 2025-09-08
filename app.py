@@ -252,15 +252,33 @@ def scan_receipt():
         merchant_name = 'Unknown Merchant'
         raw_text = str(result.get('raw_text', '')).lower()
         
-        # Check for D-Mart specific patterns
-        if any(pattern in raw_text for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
-            merchant_name = 'D-Mart'
-        elif 'big bazaar' in raw_text:
-            merchant_name = 'Big Bazaar'
-        elif 'reliance' in raw_text:
-            merchant_name = 'Reliance'
-        elif 'more' in raw_text:
-            merchant_name = 'More'
+        # Extract merchant name from first few lines (usually contains business name)
+        lines = raw_text.split('\n')[:5]  # Check first 5 lines
+        for line in lines:
+            line = line.strip()
+            if len(line) > 3 and not re.match(r'^\d+', line):  # Not starting with numbers
+                # Skip common non-merchant words
+                if not any(skip in line for skip in ['sale', 'batch', 'appr', 'trace', 'visa', 'phone', 'address']):
+                    # Clean up the line
+                    clean_line = re.sub(r'[^\w\s]', ' ', line).strip()
+                    if len(clean_line) > 3:
+                        merchant_name = clean_line.title()
+                        break
+        
+        # Fallback to specific known patterns
+        if merchant_name == 'Unknown Merchant':
+            if any(pattern in raw_text for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
+                merchant_name = 'D-Mart'
+            elif 'big bazaar' in raw_text:
+                merchant_name = 'Big Bazaar'
+            elif 'reliance' in raw_text:
+                merchant_name = 'Reliance'
+            elif 'harbor lane cafe' in raw_text:
+                merchant_name = 'Harbor Lane Cafe'
+            elif 'mcdonald' in raw_text:
+                merchant_name = "McDonald's"
+            elif 'kfc' in raw_text:
+                merchant_name = 'KFC'
         
         # Format response for Flutter app compatibility
         # Flutter expects specific field names for the extractData method
@@ -343,28 +361,67 @@ def extract_data():
             return jsonify({'error': 'No text provided'}), 400
         
         text = data['text']
-        
-        # Extract merchant name
-        merchant_name = 'Unknown Merchant'
         text_lower = text.lower()
         
-        if any(pattern in text_lower for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
-            merchant_name = 'D-Mart'
-        elif 'big bazaar' in text_lower:
-            merchant_name = 'Big Bazaar'
-        elif 'reliance' in text_lower:
-            merchant_name = 'Reliance'
-        elif 'more' in text_lower:
-            merchant_name = 'More'
+        # Extract merchant name from first few lines (usually contains business name)
+        merchant_name = 'Unknown Merchant'
+        lines = text.split('\n')[:5]  # Check first 5 lines
+        for line in lines:
+            line = line.strip()
+            if len(line) > 3 and not re.match(r'^\d+', line):  # Not starting with numbers
+                # Skip common non-merchant words
+                if not any(skip in line.lower() for skip in ['sale', 'batch', 'appr', 'trace', 'visa', 'phone', 'address']):
+                    # Clean up the line
+                    clean_line = re.sub(r'[^\w\s]', ' ', line).strip()
+                    if len(clean_line) > 3:
+                        merchant_name = clean_line.title()
+                        break
         
-        # Extract total amount using D-Mart specific pattern
+        # Fallback to specific known patterns
+        if merchant_name == 'Unknown Merchant':
+            if any(pattern in text_lower for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
+                merchant_name = 'D-Mart'
+            elif 'big bazaar' in text_lower:
+                merchant_name = 'Big Bazaar'
+            elif 'reliance' in text_lower:
+                merchant_name = 'Reliance'
+            elif 'harbor lane cafe' in text_lower:
+                merchant_name = 'Harbor Lane Cafe'
+            elif 'mcdonald' in text_lower:
+                merchant_name = "McDonald's"
+            elif 'kfc' in text_lower:
+                merchant_name = 'KFC'
+        
+        # Extract total amount using multiple international patterns
         total_amount = None
-        dmart_total_match = re.search(r'qty:\s*iy\s*(\d+\.\d{2})', text_lower)
-        if dmart_total_match:
-            try:
-                total_amount = float(dmart_total_match.group(1))
-            except (ValueError, TypeError):
-                pass
+        
+        # Multiple total patterns for different countries and formats
+        total_patterns = [
+            # US format: "TOTAL: $31.39"
+            r'total:\s*\$(\d+\.\d{2})',
+            # Indian format: "Total: ₹1095.85" or "Total Rs. 1095.85"
+            r'total[:\s]*₹?\s*(\d+\.?\d*)',
+            r'total[:\s]*rs\.?\s*(\d+\.?\d*)',
+            # D-Mart specific: "Qty: iY 1095.85"
+            r'qty:\s*iy\s*(\d+\.\d{2})',
+            # Generic: "Total 31.39" or "TOTAL 31.39"
+            r'total\s+(\d+\.\d{2})',
+            # Amount at end of line with currency symbols
+            r'[\$₹]\s*(\d+\.\d{2})\s*$',
+            # Final total patterns
+            r'final[:\s]*total[:\s]*[\$₹]?(\d+\.\d{2})',
+            r'grand[:\s]*total[:\s]*[\$₹]?(\d+\.\d{2})',
+        ]
+        
+        for pattern in total_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                try:
+                    total_amount = float(match.group(1))
+                    logger.info(f"Found total using pattern: {pattern} = {total_amount}")
+                    break
+                except (ValueError, TypeError):
+                    continue
         
         # Extract date
         date = None
