@@ -334,6 +334,73 @@ def get_receipts():
             'message': str(e)
         }), 500
 
+@app.route('/api/extract', methods=['POST'])
+def extract_data():
+    """Extract structured data from receipt text."""
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        text = data['text']
+        
+        # Extract merchant name
+        merchant_name = 'Unknown Merchant'
+        text_lower = text.lower()
+        
+        if any(pattern in text_lower for pattern in ['d: mart', 'dmart', 'd mart', 'avenue supermarts']):
+            merchant_name = 'D-Mart'
+        elif 'big bazaar' in text_lower:
+            merchant_name = 'Big Bazaar'
+        elif 'reliance' in text_lower:
+            merchant_name = 'Reliance'
+        elif 'more' in text_lower:
+            merchant_name = 'More'
+        
+        # Extract total amount using D-Mart specific pattern
+        total_amount = None
+        dmart_total_match = re.search(r'qty:\s*iy\s*(\d+\.\d{2})', text_lower)
+        if dmart_total_match:
+            try:
+                total_amount = float(dmart_total_match.group(1))
+            except (ValueError, TypeError):
+                pass
+        
+        # Extract date
+        date = None
+        date_patterns = [
+            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
+            r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})',
+            r'(\d{2}/\d{2}/\d{4})',
+            r'bill dt[:\s]*(\d{2}/\d{2}/\d{4})'
+        ]
+        
+        for pattern in date_patterns:
+            matches = re.findall(pattern, text_lower)
+            if matches:
+                date = matches[0]
+                break
+        
+        # Return structured data in format Flutter expects
+        return jsonify({
+            'success': True,
+            'data': {
+                'merchant': merchant_name,
+                'date': date,
+                'total': total_amount,
+                'tax': None,
+                'raw_text': text,
+                'items': []
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error extracting data: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/info')
 def api_info():
     """API information endpoint."""
