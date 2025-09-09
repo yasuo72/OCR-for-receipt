@@ -2,6 +2,7 @@
 Enhanced API for receipt scanning with improved OCR and data extraction.
 """
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import json
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Enable CORS for all routes
+CORS(app)
 
 # Initialize the enhanced scanner
 scanner = EnhancedReceiptScanner()
