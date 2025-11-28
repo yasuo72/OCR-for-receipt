@@ -17,8 +17,3 @@ werkzeug==2.3.7
 
 # Utilities
 requests==2.31.0
-
-# Deep learning OCR (heavier, but significantly improves accuracy for complex receipts)
-easyocr==1.7.1
-torch==2.0.1
-torchvision==0.15.2
