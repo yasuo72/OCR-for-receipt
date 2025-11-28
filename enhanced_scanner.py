@@ -113,14 +113,23 @@ class EnhancedReceiptScanner:
         # Use Tesseract with different configurations
         config_items = self.tesseract_configs.items()
         if fast_mode:
-            preferred_configs = ['receipt_optimized', 'default']
-            config_items = [(name, self.tesseract_configs[name]) for name in preferred_configs if name in self.tesseract_configs]
+            # In fast mode, use only the most relevant receipt-optimized config
+            preferred_configs = ['receipt_optimized']
+            config_items = [
+                (name, self.tesseract_configs[name])
+                for name in preferred_configs
+                if name in self.tesseract_configs
+            ]
         
         for config_name, config in config_items:
             for proc_name, proc_image in processed_images.items():
                 try:
                     text = pytesseract.image_to_string(proc_image, config=config)
-                    confidence = self._calculate_tesseract_confidence(proc_image, config)
+                    if fast_mode:
+                        # Lightweight confidence heuristic in fast mode to avoid extra Tesseract passes
+                        confidence = min(len(text) / 1000.0, 1.0) if text else 0.0
+                    else:
+                        confidence = self._calculate_tesseract_confidence(proc_image, config)
                     ocr_results.append(OCRResult(
                         text=text,
                         confidence=confidence,
