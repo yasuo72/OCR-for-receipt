@@ -161,9 +161,16 @@ class EnhancedReceiptScanner:
                     logger.warning(f"Tesseract {config_name} failed on {proc_name}: {e}")
         
         # Use EasyOCR if available
-        if self.easyocr_available and not fast_mode:
-            for proc_name, proc_image in processed_images.items():
-                try:
+        if self.easyocr_available:
+            try:
+                if fast_mode:
+                    # In fast mode, run EasyOCR once on a representative variant (prefer standard)
+                    if 'standard' in processed_images:
+                        proc_name = 'standard'
+                        proc_image = processed_images['standard']
+                    else:
+                        # Fallback to the first available variant
+                        proc_name, proc_image = next(iter(processed_images.items()))
                     results = self.easyocr_reader.readtext(proc_image)
                     text = ' '.join([result[1] for result in results])
                     confidence = np.mean([result[2] for result in results]) if results else 0
@@ -171,11 +178,24 @@ class EnhancedReceiptScanner:
                     ocr_results.append(OCRResult(
                         text=text,
                         confidence=confidence,
-                        method=f"easyocr_{proc_name}",
+                        method=f"easyocr_fast_{proc_name}",
                         bounding_boxes=bboxes
                     ))
-                except Exception as e:
-                    logger.warning(f"EasyOCR failed on {proc_name}: {e}")
+                else:
+                    # In full mode, run EasyOCR on all variants
+                    for proc_name, proc_image in processed_images.items():
+                        results = self.easyocr_reader.readtext(proc_image)
+                        text = ' '.join([result[1] for result in results])
+                        confidence = np.mean([result[2] for result in results]) if results else 0
+                        bboxes = [result[0] for result in results]
+                        ocr_results.append(OCRResult(
+                            text=text,
+                            confidence=confidence,
+                            method=f"easyocr_{proc_name}",
+                            bounding_boxes=bboxes
+                        ))
+            except Exception as e:
+                logger.warning(f"EasyOCR failed: {e}")
         
         # Save processed images for debugging
         if save_processed:
