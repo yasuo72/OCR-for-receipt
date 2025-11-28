@@ -61,8 +61,8 @@ def process_ocr(image_path):
         if SCANNER_AVAILABLE == "enhanced" and enhanced_scanner is not None:
             logger.info("Using enhanced OCR scanner for better accuracy")
             
-            # Use enhanced scanner with multiple preprocessing techniques
-            extracted = enhanced_scanner.scan_receipt(image_path)
+            # Use enhanced scanner with optimized fast mode for API calls
+            extracted = enhanced_scanner.scan_receipt(image_path, save_processed=False, fast_mode=True)
             
             if extracted is not None:
                 raw_text = extracted.raw_text or ""

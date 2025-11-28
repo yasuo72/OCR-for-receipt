@@ -77,7 +77,7 @@ class EnhancedReceiptScanner:
             'receipt_optimized': r'--oem 3 --psm 6 -c preserve_interword_spaces=1 -c tessedit_create_hocr=1'
         }
 
-    def scan_receipt(self, image_path: str, save_processed: bool = True) -> ExtractedData:
+    def scan_receipt(self, image_path: str, save_processed: bool = True, fast_mode: bool = False) -> ExtractedData:
         """
         Enhanced receipt scanning with multiple OCR engines and intelligent parsing.
         
@@ -98,11 +98,21 @@ class EnhancedReceiptScanner:
         # Apply multiple preprocessing techniques
         processed_images = self._advanced_preprocessing(image)
         
+        # In fast mode, use only a subset of preprocessing variants to keep latency low
+        if fast_mode:
+            preferred_keys = ['standard', 'adaptive']
+            processed_images = {k: v for k, v in processed_images.items() if k in preferred_keys}
+        
         # Extract text using multiple OCR engines
         ocr_results = []
         
         # Use Tesseract with different configurations
-        for config_name, config in self.tesseract_configs.items():
+        config_items = self.tesseract_configs.items()
+        if fast_mode:
+            preferred_configs = ['receipt_optimized', 'default']
+            config_items = [(name, self.tesseract_configs[name]) for name in preferred_configs if name in self.tesseract_configs]
+        
+        for config_name, config in config_items:
             for proc_name, proc_image in processed_images.items():
                 try:
                     text = pytesseract.image_to_string(proc_image, config=config)
@@ -116,7 +126,7 @@ class EnhancedReceiptScanner:
                     logger.warning(f"Tesseract {config_name} failed on {proc_name}: {e}")
         
         # Use EasyOCR if available
-        if self.easyocr_available:
+        if self.easyocr_available and not fast_mode:
             for proc_name, proc_image in processed_images.items():
                 try:
                     results = self.easyocr_reader.readtext(proc_image)
