@@ -6,7 +6,7 @@ import os
 import cv2
 import numpy as np
 import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import re
 from typing import Dict, List, Any, Tuple, Optional, Union
 import logging
@@ -90,19 +90,43 @@ class EnhancedReceiptScanner:
         """
         logger.info(f"Starting enhanced scan of: {image_path}")
         
-        # Read and validate image
-        image = cv2.imread(image_path)
+        # Read and validate image with EXIF-aware orientation handling
+        try:
+            pil_image = Image.open(image_path)
+            pil_image = ImageOps.exif_transpose(pil_image)
+            image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            logger.warning(f"PIL/EXIF load failed, falling back to cv2.imread: {e}")
+            image = cv2.imread(image_path)
+        
         if image is None:
             raise ValueError(f"Could not read image at {image_path}")
         
+        # Light central cropping to reduce background noise while keeping full receipt
+        try:
+            h, w = image.shape[:2]
+            if h > 0 and w > 0:
+                top = int(0.05 * h)
+                bottom = int(0.95 * h)
+                left = int(0.10 * w)
+                right = int(0.90 * w)
+                image = image[top:bottom, left:right]
+        except Exception as e:
+            logger.warning(f"Image cropping failed, using original image: {e}")
+        
         # Apply preprocessing
         if fast_mode:
-            # In fast mode, only compute the most useful variants to reduce latency
+            # In fast mode, compute a small set of high-value variants
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             processed_images = {
                 'standard': self._standard_preprocessing(gray),
                 'adaptive': self._adaptive_preprocessing(gray),
             }
+            # Also try perspective-corrected versions to better isolate the receipt region
+            perspective = self._perspective_correction(gray)
+            if perspective is not None:
+                processed_images['perspective_standard'] = self._standard_preprocessing(perspective)
+                processed_images['perspective_adaptive'] = self._adaptive_preprocessing(perspective)
         else:
             # Full advanced preprocessing for maximum robustness
             processed_images = self._advanced_preprocessing(image)
@@ -125,11 +149,9 @@ class EnhancedReceiptScanner:
             for proc_name, proc_image in processed_images.items():
                 try:
                     text = pytesseract.image_to_string(proc_image, config=config)
-                    if fast_mode:
-                        # Lightweight confidence heuristic in fast mode to avoid extra Tesseract passes
-                        confidence = min(len(text) / 1000.0, 1.0) if text else 0.0
-                    else:
-                        confidence = self._calculate_tesseract_confidence(proc_image, config)
+                    # Use Tesseract's detailed confidence calculation even in fast mode;
+                    # fast mode is already limited in configs/preprocessing, so this stays performant.
+                    confidence = self._calculate_tesseract_confidence(proc_image, config)
                     ocr_results.append(OCRResult(
                         text=text,
                         confidence=confidence,
