@@ -109,21 +109,27 @@ class EnhancedReceiptExtractor:
 
     def _clean_text(self, text: str) -> str:
         """Clean and normalize OCR text."""
-        # Remove excessive whitespace
-        text = re.sub(r'\s+', ' ', text)
+        # Remove excessive whitespace (preserve line breaks)
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Collapse internal whitespace within the line
+            line = re.sub(r'[ \t]+', ' ', line)
+            
+            # Fix common OCR errors
+            line = line.replace('|', 'I')
+            line = line.replace('0', 'O', 1)  # First 0 might be O in merchant name
+            line = line.replace('5', 'S', 1)  # First 5 might be S in merchant name
+            
+            # Normalize currency symbols
+            line = re.sub(r'[₹Rs\.]+', '₹', line)
+            
+            # Fix decimal separators
+            line = re.sub(r'(\d+),(\d{2})\b', r'\1.\2', line)
+            
+            cleaned_lines.append(line.strip())
         
-        # Fix common OCR errors
-        text = text.replace('|', 'I')
-        text = text.replace('0', 'O', 1)  # First 0 might be O in merchant name
-        text = text.replace('5', 'S', 1)  # First 5 might be S in merchant name
-        
-        # Normalize currency symbols
-        text = re.sub(r'[₹Rs\.]+', '₹', text)
-        
-        # Fix decimal separators
-        text = re.sub(r'(\d+),(\d{2})\b', r'\1.\2', text)
-        
-        return text.strip()
+        return '\n'.join(cleaned_lines).strip()
 
     def _extract_merchant_enhanced(self, text: str) -> Optional[str]:
         """Enhanced merchant name extraction with multiple strategies."""
