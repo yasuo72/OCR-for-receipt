@@ -95,13 +95,17 @@ class EnhancedReceiptScanner:
         if image is None:
             raise ValueError(f"Could not read image at {image_path}")
         
-        # Apply multiple preprocessing techniques
-        processed_images = self._advanced_preprocessing(image)
-        
-        # In fast mode, use only a subset of preprocessing variants to keep latency low
+        # Apply preprocessing
         if fast_mode:
-            preferred_keys = ['standard', 'adaptive']
-            processed_images = {k: v for k, v in processed_images.items() if k in preferred_keys}
+            # In fast mode, only compute the most useful variants to reduce latency
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            processed_images = {
+                'standard': self._standard_preprocessing(gray),
+                'adaptive': self._adaptive_preprocessing(gray),
+            }
+        else:
+            # Full advanced preprocessing for maximum robustness
+            processed_images = self._advanced_preprocessing(image)
         
         # Extract text using multiple OCR engines
         ocr_results = []
