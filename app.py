@@ -62,28 +62,28 @@ def process_ocr(image_path):
             logger.info("Using enhanced OCR scanner for better accuracy")
             
             # Use enhanced scanner with multiple preprocessing techniques
-            result = enhanced_scanner.scan_receipt(image_path)
+            extracted = enhanced_scanner.scan_receipt(image_path)
             
-            if result and 'extracted_data' in result:
-                extracted_data = result['extracted_data']
+            if extracted is not None:
+                raw_text = extracted.raw_text or ""
                 
-                # Format result to match expected structure
+                # Format result to match expected structure used by /api/scan
                 receipt_data = {
-                    'raw_text': result.get('raw_text', ''),
-                    'lines': result.get('raw_text', '').split('\n') if result.get('raw_text') else [],
-                    'method': f"enhanced_{result.get('best_method', 'unknown')}",
+                    'raw_text': raw_text,
+                    'lines': raw_text.split('\n') if raw_text else [],
+                    'method': 'enhanced_scanner',
                     'status': 'processed',
-                    'confidence': result.get('confidence_score', 0),
-                    'total': extracted_data.get('total_amount'),
-                    'date': extracted_data.get('date'),
-                    'merchant': extracted_data.get('merchant_name', 'Unknown Merchant'),
-                    'items': extracted_data.get('items', [])
+                    'confidence': extracted.confidence_score,
+                    'total': extracted.total,
+                    'date': extracted.date,
+                    'merchant': extracted.merchant or 'Unknown Merchant',
+                    'items': extracted.items or []
                 }
                 
                 logger.info(f"Enhanced OCR result: {receipt_data}")
                 return receipt_data
             else:
-                logger.warning("Enhanced scanner failed, falling back to basic OCR")
+                logger.warning("Enhanced scanner returned no data, falling back to basic OCR")
         
         # Fallback to basic OCR processing
         logger.info("Using basic OCR processing")
@@ -362,6 +362,34 @@ def extract_data():
         
         text = data['text']
         text_lower = text.lower()
+        
+        # Use enhanced extractor when available for best structured parsing
+        if SCANNER_AVAILABLE == "enhanced" and enhanced_extractor is not None:
+            try:
+                extracted = enhanced_extractor.extract_data(text)
+                items = []
+                if extracted.items:
+                    for item in extracted.items:
+                        if isinstance(item, dict):
+                            items.append({
+                                'name': item.get('name'),
+                                'quantity': item.get('quantity'),
+                                'price': item.get('unit_price'),
+                                'totalPrice': item.get('total_price'),
+                            })
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'merchant': extracted.merchant,
+                        'date': extracted.date,
+                        'total': extracted.total,
+                        'tax': extracted.tax,
+                        'raw_text': extracted.raw_text,
+                        'items': items,
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Enhanced extractor failed, falling back to regex extractor: {e}")
         
         # Extract merchant name - enhanced for business invoices
         merchant_name = None

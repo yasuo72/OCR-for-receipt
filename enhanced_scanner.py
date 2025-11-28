@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
-import easyocr
 import re
 from typing import Dict, List, Any, Tuple, Optional, Union
 import logging
@@ -53,8 +52,9 @@ class EnhancedReceiptScanner:
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
         
-        # Initialize EasyOCR reader (supports multiple languages)
+        # Initialize EasyOCR reader (supports multiple languages) if available
         try:
+            import easyocr
             self.easyocr_reader = easyocr.Reader(['en', 'hi'], gpu=False)
             self.easyocr_available = True
             logger.info("EasyOCR initialized successfully")
