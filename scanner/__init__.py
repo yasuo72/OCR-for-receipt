@@ -1,0 +1,3 @@
+"""
+Scanner app package.
+"""

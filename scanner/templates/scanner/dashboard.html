@@ -1,0 +1,378 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinSathi OCR — Intelligent Receipt Scanner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+<body class="dark-theme">
+    <!-- Background Gradient Spheres -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-group">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>FinSathi <span>OCR</span></h1>
+                    <span class="badge django-badge">Django 4.2</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="engine-badge {% if status.enhanced_ready %}engine-enhanced{% else %}engine-basic{% endif %}" id="engineStatusBadge">
+                    <span class="pulse-dot"></span>
+                    <span class="engine-text">Engine: {{ status.scanner_available|upper }}</span>
+                </div>
+                <a href="/admin/" class="btn btn-secondary btn-sm" target="_blank">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    Django Admin
+                </a>
+                <a href="/api/info" class="btn btn-secondary btn-sm" target="_blank">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    API Docs
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- Top Stats Bar -->
+            <div class="stats-grid">
+                <div class="stat-card glass-panel">
+                    <div class="stat-icon icon-blue">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="stat-data">
+                        <span class="stat-label">Total Receipts Scanned</span>
+                        <span class="stat-value" id="totalScannedCount">{{ total_scanned }}</span>
+                    </div>
+                </div>
+
+                <div class="stat-card glass-panel">
+                    <div class="stat-icon icon-green">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                    </div>
+                    <div class="stat-data">
+                        <span class="stat-label">OCR Accuracy Engines</span>
+                        <span class="stat-value">Tesseract + EasyOCR</span>
+                    </div>
+                </div>
+
+                <div class="stat-card glass-panel">
+                    <div class="stat-icon icon-purple">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                        </svg>
+                    </div>
+                    <div class="stat-data">
+                        <span class="stat-label">Supported Formats</span>
+                        <span class="stat-value">D-Mart, Retail, GST & Invoices</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Scanner & Result Section -->
+            <div class="grid-2-col">
+                <!-- Left: Upload & Test Area -->
+                <div class="card glass-panel">
+                    <div class="card-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Upload Receipt Image
+                        </h2>
+                        <span class="card-subtitle">Drag & drop receipt photo or select sample bill</span>
+                    </div>
+
+                    <!-- Dropzone -->
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="fileInput" accept="image/*" class="file-input">
+                        <div class="dropzone-content" id="dropzoneContent">
+                            <div class="upload-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Drag & drop receipt image here</h3>
+                            <p>or click to browse files from your computer</p>
+                            <span class="file-types">Supports PNG, JPG, JPEG, WEBP, TIFF (Max 16MB)</span>
+                        </div>
+                        <div class="preview-area d-none" id="previewArea">
+                            <img id="imagePreview" src="" alt="Receipt Preview">
+                            <button type="button" class="btn btn-danger btn-sm remove-btn" id="removeFileBtn">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                                Change
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scan Action Controls -->
+                    <div class="action-bar">
+                        <label class="toggle-control">
+                            <input type="checkbox" id="fastModeToggle">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Fast Mode (Optimized Latency)</span>
+                        </label>
+                        <button type="button" class="btn btn-primary" id="scanBtn" disabled>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" id="scanBtnIcon">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <span id="scanBtnText">Scan Receipt</span>
+                        </button>
+                    </div>
+
+                    <!-- Quick Sample Bills Picker -->
+                    {% if sample_images %}
+                    <div class="samples-section">
+                        <div class="samples-header">
+                            <h4>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
+                                Quick Test Sample Bills
+                            </h4>
+                            <button type="button" class="btn-text" id="runAllSamplesBtn">Run Batch Test</button>
+                        </div>
+                        <div class="samples-scroll">
+                            {% for img in sample_images %}
+                            <div class="sample-chip" data-sample="{{ img }}">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                </svg>
+                                <span>{{ img }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Right: Live Result Section -->
+                <div class="card glass-panel" id="resultsPanel">
+                    <div class="card-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                            Extracted Structured Data
+                        </h2>
+                        <div class="confidence-indicator d-none" id="confidenceIndicator">
+                            <span class="confidence-badge" id="confidenceScore">0%</span>
+                        </div>
+                    </div>
+
+                    <!-- Placeholder State -->
+                    <div class="empty-state" id="emptyResultState">
+                        <div class="empty-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <circle cx="12" cy="13" r="3"></circle>
+                            </svg>
+                        </div>
+                        <h3>No receipt scanned yet</h3>
+                        <p>Upload a receipt on the left or pick a sample bill to view real-time OCR extraction results here.</p>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div class="loading-state d-none" id="loadingState">
+                        <div class="spinner"></div>
+                        <h3>Processing receipt OCR...</h3>
+                        <p id="loadingStatusText">Applying adaptive contrast, edge sharpening and multilingual text extraction</p>
+                    </div>
+
+                    <!-- Active Result View -->
+                    <div class="results-content d-none" id="resultsContent">
+                        <!-- Key Metadata Cards -->
+                        <div class="result-highlights">
+                            <div class="highlight-box">
+                                <span class="highlight-title">Merchant</span>
+                                <span class="highlight-val highlight-merchant" id="resMerchant">—</span>
+                            </div>
+                            <div class="highlight-box">
+                                <span class="highlight-title">Date</span>
+                                <span class="highlight-val" id="resDate">—</span>
+                            </div>
+                            <div class="highlight-box highlight-total-box">
+                                <span class="highlight-title">Total Amount</span>
+                                <span class="highlight-val highlight-total" id="resTotal">₹0.00</span>
+                            </div>
+                            <div class="highlight-box">
+                                <span class="highlight-title">Tax / GST</span>
+                                <span class="highlight-val" id="resTax">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Result Tabs -->
+                        <div class="tabs-nav">
+                            <button type="button" class="tab-btn active" data-tab="tab-items">
+                                Items (<span id="itemsCountBadge">0</span>)
+                            </button>
+                            <button type="button" class="tab-btn" data-tab="tab-raw">Raw OCR Text</button>
+                            <button type="button" class="tab-btn" data-tab="tab-json">JSON API Response</button>
+                        </div>
+
+                        <!-- Tab 1: Items Table -->
+                        <div class="tab-pane active" id="tab-items">
+                            <div class="table-responsive">
+                                <table class="custom-table" id="itemsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Item Description</th>
+                                            <th>Qty</th>
+                                            <th>Unit Price</th>
+                                            <th>Total Price</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="itemsTableBody">
+                                        <!-- Dynamic items row -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Tab 2: Raw Text -->
+                        <div class="tab-pane" id="tab-raw">
+                            <pre class="raw-text-view" id="rawTextView"></pre>
+                        </div>
+
+                        <!-- Tab 3: JSON -->
+                        <div class="tab-pane" id="tab-json">
+                            <pre class="json-code-view" id="jsonCodeView"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Scans History Table -->
+            <div class="card glass-panel history-card">
+                <div class="card-header history-header">
+                    <div>
+                        <h2>
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            Scanned Receipts Database History
+                        </h2>
+                        <span class="card-subtitle">Persisted in SQLite via Django ORM</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="refreshHistoryBtn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="custom-table" id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Merchant</th>
+                                <th>Date</th>
+                                <th>Total</th>
+                                <th>Confidence</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Scanned At</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            {% for r in recent_receipts %}
+                            <tr id="receipt-row-{{ r.id }}">
+                                <td>#{{ r.id }}</td>
+                                <td class="font-bold">{{ r.merchant }}</td>
+                                <td>{{ r.date|default:"—" }}</td>
+                                <td class="text-emerald font-bold">{% if r.total %}₹{{ r.total|floatformat:2 }}{% else %}—{% endif %}</td>
+                                <td>
+                                    <span class="confidence-pill" style="--conf: {{ r.confidence_score|default:0 }}">
+                                        {{ r.confidence_score|floatformat:2 }}
+                                    </span>
+                                </td>
+                                <td><span class="method-tag">{{ r.scanner_method }}</span></td>
+                                <td><span class="status-tag status-{{ r.status }}">{{ r.status }}</span></td>
+                                <td class="text-muted">{{ r.created_at|date:"M d, Y H:i" }}</td>
+                                <td>
+                                    <button class="btn-icon delete-receipt-btn" data-id="{{ r.id }}" title="Delete Receipt">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr id="noHistoryRow">
+                                <td colspan="9" class="text-center text-muted" style="padding: 2.5rem 1rem;">
+                                    No receipts recorded in the database yet. Scan your first receipt above!
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        <div class="container footer-content">
+            <p>© 2026 FinSathi OCR — Intelligent Receipt Scanner Django Project</p>
+            <div class="footer-links">
+                <a href="/api/health" target="_blank">Health Check</a>
+                <a href="/api/info" target="_blank">API Specs</a>
+                <a href="/admin/" target="_blank">Django Admin</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="{% static 'js/dashboard.js' %}"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /app
 
-# Copy enhanced requirements
+# Copy requirements
 COPY requirements_enhanced.txt .
 
 # Install Python dependencies
@@ -26,12 +26,13 @@ RUN pip install --no-cache-dir -r requirements_enhanced.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p data/receipts data/uploads data/processed data/results
+RUN mkdir -p data/receipts data/uploads data/processed data/results staticfiles
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
-ENV FLASK_ENV=production
+ENV DJANGO_SETTINGS_MODULE=receipt_scanner_project.settings
+ENV DJANGO_DEBUG=False
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 # Expose port

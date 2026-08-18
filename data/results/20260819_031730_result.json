@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "id": 1,
+  "filename": "20260819_031730_ItemizedReceipt.jpg",
+  "scanner_type": "enhanced_scanner",
+  "timestamp": "2026-08-19T03:17:31.086895",
+  "message": "Receipt processed successfully",
+  "text": "OCR_FAILED",
+  "merchant": "Ocr_Failed",
+  "date": "",
+  "total": null,
+  "tax": null,
+  "raw_text": "OCR_FAILED",
+  "items": [],
+  "data": {
+    "merchant": "Ocr_Failed",
+    "date": null,
+    "total": null,
+    "subtotal": null,
+    "tax": null,
+    "items": [],
+    "payment_method": null,
+    "receipt_number": null,
+    "confidence_score": 0.85,
+    "raw_text": "OCR_FAILED"
+  },
+  "receipt": {
+    "id": 1,
+    "text": "OCR_FAILED",
+    "total": 0.0,
+    "date": "",
+    "items": [
+      "OCR_FAILED"
+    ],
+    "confidence": "0.85",
+    "method": "enhanced_scanner",
+    "status": "processed"
+  }
+}

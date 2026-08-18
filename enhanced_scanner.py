@@ -48,9 +48,19 @@ class EnhancedReceiptScanner:
         Args:
             tesseract_path: Path to Tesseract executable (optional)
         """
-        # Set Tesseract path if provided
+        # Set Tesseract path if provided or auto-detect on Windows
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        elif os.name == 'nt':
+            for win_path in [
+                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                os.path.expanduser(r'~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'),
+            ]:
+                if os.path.exists(win_path):
+                    pytesseract.pytesseract.tesseract_cmd = win_path
+                    logger.info(f"Auto-configured Windows Tesseract path: {win_path}")
+                    break
         
         # Initialize EasyOCR reader (supports multiple languages) if available
         try:

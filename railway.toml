@@ -8,6 +8,7 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 
 [env]
-FLASK_ENV = "production"
+DJANGO_SETTINGS_MODULE = "receipt_scanner_project.settings"
+DJANGO_DEBUG = "False"
 PYTHONUNBUFFERED = "1"
 TESSDATA_PREFIX = "/usr/share/tesseract-ocr/5/tessdata"

@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
 """
-Direct Python server startup - bypasses all gunicorn issues
+Direct Django server startup for local and cloud deployment (Railway, Render, Heroku).
+Automatically runs migrations and starts the Django development/production server.
 """
 import os
 import sys
-import subprocess
 
 def main():
-    """Start the Flask app directly"""
-    print("Starting OCR Receipt Scanner API...")
-    print("Bypassing gunicorn completely...")
+    """Start the Django app directly with migrations"""
+    print("Starting FinSathi OCR Receipt Scanner Django Server...")
     
-    # Set environment variables
-    os.environ['FLASK_ENV'] = 'production'
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'receipt_scanner_project.settings')
     os.environ['PYTHONUNBUFFERED'] = '1'
     
-    # Import and run the app
+    # Create required data directories
+    os.makedirs('data/uploads', exist_ok=True)
+    os.makedirs('data/processed', exist_ok=True)
+    os.makedirs('data/results', exist_ok=True)
+    os.makedirs('data/receipts', exist_ok=True)
+    
     try:
-        from app import app
-        port = int(os.environ.get('PORT', 8080))
-        print(f"Starting server on port {port}")
-        app.run(host='0.0.0.0', port=port, debug=False)
+        from django.core.management import execute_from_command_line
+        
+        # 1. Run migrations
+        print("Running database migrations...")
+        execute_from_command_line(['manage.py', 'migrate', '--noinput'])
+        
+        # 2. Get port and launch server
+        port = os.environ.get('PORT', '8080')
+        bind_address = f"0.0.0.0:{port}"
+        print(f"Server starting on http://{bind_address}")
+        
+        execute_from_command_line(['manage.py', 'runserver', bind_address, '--noreload'])
+        
     except Exception as e:
-        print(f"Error starting app: {e}")
+        print(f"Error starting Django app: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
